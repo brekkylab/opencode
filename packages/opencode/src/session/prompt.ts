@@ -274,6 +274,8 @@ export namespace SessionPrompt {
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      // Sort chronologically to fix lexicographic ID ordering issue
+      msgs.sort((a, b) => a.info.time.created - b.info.time.created)
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
@@ -293,10 +295,12 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+
+      // Check if we have a finished assistant response to the last user message
       if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
+        lastFinished &&
+        !["tool-calls", "unknown"].includes(lastFinished.finish) &&
+        lastFinished.parentID === lastUser.id
       ) {
         log.info("exiting loop", { sessionID })
         break
